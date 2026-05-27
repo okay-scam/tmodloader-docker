@@ -13,12 +13,16 @@ git clone https://github.com/cubebuc/tmodloader-docker.git
 cd tmodloader-docker
 ```
 
-3. Launch detached using docker compose
+3. Add mods (optional) by editing `mods.txt` with [Steam Workshop mod IDs](https://steamcommunity.com/workshop/browse/?appid=1281930) — one ID per line. Comment out a line with `#` to disable a mod.
+
+4. Launch detached using docker compose
 ```bash
 docker compose up -d
 ```
 
-4. Attach to tModLoader container
+On startup, workshop mods from `mods.txt` are downloaded automatically via SteamCMD. The server image targets **linux/amd64** (required for SteamCMD and tModLoader).
+
+5. Attach to tModLoader container
 ```bash
 docker attach tml
 ```
@@ -88,7 +92,25 @@ docker compose up -d
 
 ---
 ### Mods
-To add mods, copy the `.tmod` files directly into `tModLoader/Mods` folder (generated after first start).
+List [Steam Workshop mod IDs](https://steamcommunity.com/workshop/browse/?appid=1281930) in `mods.txt` at the repo root — one ID per line. The ID is the number in the workshop URL (`...?id=2566694256`).
+
+```
+# Better Autosave
+2566694256
+
+# Calamity (disabled)
+#2824688072
+```
+
+After editing `mods.txt`, restart the container to sync:
+
+```bash
+docker compose restart tml
+```
+
+Mods are downloaded on each container start. `tModLoader/Mods/enabled.json` and `install.txt` are generated automatically; you do not need to copy `.tmod` files manually.
+
+To use local `.tmod` files instead, place them in `tModLoader/Mods/` and add their internal mod names to `enabled.json` (see [tModLoader dedicated server docs](https://github.com/tModLoader/tModLoader/tree/stable/patches/tModLoader/Terraria/release_extras/DedicatedServerUtils)).
 
 ## Recommendations
 - By default the `tModLoader` and `backup` folders are going to be owned by root. You can make them user owned by uncommenting the `user` line in `docker-compose.yml` and `chown` line in `backup.sh`. Don't forget to change the ids to match your user and reset docker.

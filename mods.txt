@@ -1,0 +1,7 @@
+# Steam Workshop mod IDs for tModLoader (one per line).
+# Find the ID in the workshop URL:
+#   https://steamcommunity.com/sharedfiles/filedetails/?id=2566694256
+# Comment out a line with # to disable a mod without removing it.
+
+# Better Autosave — https://steamcommunity.com/sharedfiles/filedetails/?id=2566694256
+2566694256

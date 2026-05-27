@@ -2,8 +2,11 @@ services:
   tml:
     image: tmodloader
     container_name: tml
+    platform: linux/amd64
     build:
       context: .
+      platforms:
+        - linux/amd64
       args:
         TML_VERSION: ${TML_VERSION:-v2025.10.3.1}
     restart: unless-stopped
@@ -12,7 +15,14 @@ services:
       - "7777:7777"
     volumes:
       - .:/app/data
-    command: ["./start-tModLoaderServer.sh", "-savedirectory", "/app/data", "-config", "/app/data/serverconfig.txt"]
+    command:
+      - ./start-tModLoaderServer.sh
+      - -savedirectory
+      - /app/data
+      - -config
+      - /app/data/serverconfig.txt
+      - -steamworkshopfolder
+      - /app/data/steamapps/workshop
     stdin_open: true
     tty: true
 

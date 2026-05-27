@@ -35,6 +35,15 @@ can_download() {
   command -v steamcmd >/dev/null 2>&1 && [ "$(uname -m)" = "x86_64" ]
 }
 
+if ! can_download && [ "${#MOD_IDS[@]}" -gt 0 ]; then
+  if ! command -v steamcmd >/dev/null 2>&1; then
+    echo "[mods] steamcmd is not in this image — rebuild with: docker compose build --no-cache" >&2
+  elif [ "$(uname -m)" != "x86_64" ]; then
+    echo "[mods] Workshop download needs linux/amd64 (current: $(uname -m))" >&2
+    echo "[mods] Rebuild and run with platform linux/amd64 in docker-compose.yml, or copy steamMods/ from an amd64 host." >&2
+  fi
+fi
+
 if can_download; then
   echo "[mods] Downloading ${#MOD_IDS[@]} workshop mod(s)..."
   workshop_cmds=""
@@ -43,9 +52,6 @@ if can_download; then
   done
   # shellcheck disable=SC2086
   steamcmd +force_install_dir "$STEAM_MODS_DIR" +login anonymous $workshop_cmds +quit
-else
-  echo "[mods] Skipping workshop download on $(uname -m) (steamcmd needs amd64)"
-  echo "[mods] Copy steamMods/ from an amd64 host, or place .tmod files in tModLoader/Mods/"
 fi
 
 echo "[mods] Building enabled.json..."

@@ -2,8 +2,12 @@ services:
   tml:
     image: tmodloader
     container_name: tml
+    # SteamCMD is x86-only; amd64 emulation on ARM (Apple Silicon, etc.) enables workshop downloads from mods.txt.
+    platform: linux/amd64
     build:
       context: .
+      platforms:
+        - linux/amd64
       args:
         TML_VERSION: ${TML_VERSION:-v2025.10.3.1}
     restart: unless-stopped

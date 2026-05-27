@@ -23,7 +23,7 @@ docker compose up -d --build
 
 After changing `mods.txt`, run `docker compose up -d --build` or `docker compose restart tml`.
 
-Works on **ARM and amd64** (same as the original cubebuc image). Workshop downloads via SteamCMD run on **amd64 only**; on ARM, sync `steamMods/` from an amd64 machine once, or copy `.tmod` files into `tModLoader/Mods/` manually.
+Works on **ARM and amd64**. `docker-compose.yml` runs the game container as **linux/amd64** so SteamCMD can download workshop mods from `mods.txt` on Apple Silicon and other ARM hosts (uses emulation; a bit slower than native ARM).
 
 5. Attach to tModLoader container
 ```bash
@@ -125,12 +125,17 @@ You should see `[mods] Sync complete` and a non-empty `enabled.json`.
 
 #### ARM hosts (Apple Silicon, Raspberry Pi, etc.)
 
-The game server runs natively on ARM. SteamCMD (workshop download) is x86-only, so on first setup either:
+By default the `tml` service uses `platform: linux/amd64` so workshop mods from `mods.txt` download automatically. After pulling compose changes, rebuild so the image includes SteamCMD:
 
-1. Run `docker compose up -d --build` once on an **amd64** machine (or with `DOCKER_DEFAULT_PLATFORM=linux/amd64`) so `steamMods/` is populated, then copy the whole project folder to ARM, or  
-2. Copy `.tmod` files into `tModLoader/Mods/` and set `enabled.json` by hand (original cubebuc workflow).
+```bash
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+```
 
-On ARM, logs will show `Skipping workshop download` — that is expected if `steamMods/` is already present.
+Logs should show `[mods] Downloading … workshop mod(s)…` then `[mods] Sync complete`.
+
+**Native ARM (faster, no automatic workshop download):** remove the `platform:` / `platforms:` lines from `docker-compose.yml`, rebuild, and either copy a populated `steamMods/` folder from an amd64 machine or place `.tmod` files in `tModLoader/Mods/` manually.
 
 ## Recommendations
 - By default the `tModLoader` and `backup` folders are going to be owned by root. You can make them user owned by uncommenting the `user` line in `docker-compose.yml` and `chown` line in `backup.sh`. Don't forget to change the ids to match your user and reset docker.

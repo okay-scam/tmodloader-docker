@@ -8,16 +8,33 @@ if [ "${TARGETARCH:-}" != "amd64" ]; then
   exit 0
 fi
 
+export DEBIAN_FRONTEND=noninteractive
+dpkg --add-architecture i386
+apt-get update
+apt-get install -y --no-install-recommends \
+  ca-certificates \
+  libc6:i386 \
+  libgcc-s1:i386 \
+  libstdc++6:i386 \
+  zlib1g:i386
+
 BUNDLE=/tmp/steamcmd-bundle
-mkdir -p /usr/lib/games/steam /lib/i386-linux-gnu
+mkdir -p /usr/lib/games/steam/linux32
 
 cp "$BUNDLE/bin/steamcmd.sh" /usr/lib/games/steam/
-cp "$BUNDLE/bin/linux32_steamcmd" /usr/lib/games/steam/steamcmd
-cp "$BUNDLE/bin/steamcmd_wrapper" /usr/bin/steamcmd
-cp -a "$BUNDLE/i386-lib/"* /lib/i386-linux-gnu/
+cp "$BUNDLE/bin/linux32_steamcmd" /usr/lib/games/steam/linux32/steamcmd
 cp "$BUNDLE/libstdc++.so.6" /lib/
 
-chmod +x /usr/bin/steamcmd /usr/lib/games/steam/steamcmd /usr/lib/games/steam/steamcmd.sh
-steamcmd +quit
+cat > /usr/bin/steamcmd <<'EOF'
+#!/bin/sh
+exec /usr/lib/games/steam/steamcmd.sh "$@"
+EOF
 
-echo "steamcmd installed successfully"
+chmod +x /usr/bin/steamcmd /usr/lib/games/steam/linux32/steamcmd /usr/lib/games/steam/steamcmd.sh
+
+if [ "${BUILDPLATFORM:-}" = "linux/amd64" ]; then
+  steamcmd +quit
+  echo "steamcmd installed successfully"
+else
+  echo "steamcmd installed (skipped smoke test on ${BUILDPLATFORM:-unknown} builder)"
+fi

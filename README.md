@@ -112,6 +112,24 @@ Mods are downloaded on each container start. `tModLoader/Mods/enabled.json` and 
 
 To use local `.tmod` files instead, place them in `tModLoader/Mods/` and add their internal mod names to `enabled.json` (see [tModLoader dedicated server docs](https://github.com/tModLoader/tModLoader/tree/stable/patches/tModLoader/Terraria/release_extras/DedicatedServerUtils)).
 
+#### Troubleshooting mod sync
+
+Confirm sync worked:
+
+```bash
+cat tModLoader/Mods/enabled.json          # should NOT be []
+find steamapps/workshop/content/1281930 -name '*.tmod'
+```
+
+If logs show `Segmentation fault` or `futex robust_list` from steamcmd, pull the latest image (`docker compose build --no-cache`) or download mods on the **host**:
+
+```bash
+sudo apt install steamcmd   # Debian/Ubuntu amd64
+chmod +x sync-mods-host.sh
+./sync-mods-host.sh
+docker compose restart tml
+```
+
 ## Recommendations
 - By default the `tModLoader` and `backup` folders are going to be owned by root. You can make them user owned by uncommenting the `user` line in `docker-compose.yml` and `chown` line in `backup.sh`. Don't forget to change the ids to match your user and reset docker.
 - Add [Better Autosave](https://steamcommunity.com/sharedfiles/filedetails/?id=2566694256) mod - by default it saves the world only once per Terraria day.

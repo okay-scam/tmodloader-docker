@@ -1,7 +1,9 @@
 #!/bin/bash
 set -e
 
-/app/sync-mods.sh
+if [ "${SKIP_MOD_SYNC:-0}" != "1" ]; then
+  /app/sync-mods.sh
+fi
 
 cd /app
 exec "$@"

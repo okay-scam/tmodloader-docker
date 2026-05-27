@@ -15,12 +15,15 @@ cd tmodloader-docker
 
 3. Add mods (optional) by editing `mods.txt` with [Steam Workshop mod IDs](https://steamcommunity.com/workshop/browse/?appid=1281930) — one ID per line. Comment out a line with `#` to disable a mod.
 
-4. Launch detached using docker compose
+4. Launch (mods from `mods.txt` download automatically on startup):
+
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-On startup, workshop mods from `mods.txt` are downloaded automatically via SteamCMD. The server image targets **linux/amd64** (required for SteamCMD and tModLoader).
+After changing `mods.txt`, run `docker compose up -d --build` or `docker compose restart tml`.
+
+Works on **ARM and amd64** (same as the original cubebuc image). Workshop downloads via SteamCMD run on **amd64 only**; on ARM, sync `steamMods/` from an amd64 machine once, or copy `.tmod` files into `tModLoader/Mods/` manually.
 
 5. Attach to tModLoader container
 ```bash
@@ -102,33 +105,32 @@ List [Steam Workshop mod IDs](https://steamcommunity.com/workshop/browse/?appid=
 #2824688072
 ```
 
-After editing `mods.txt`, restart the container to sync:
+After editing `mods.txt`, restart the server:
 
 ```bash
 docker compose restart tml
 ```
 
-Mods are downloaded on each container start. `tModLoader/Mods/enabled.json` and `install.txt` are generated automatically; you do not need to copy `.tmod` files manually.
+Workshop files are stored in `steamMods/` (same layout as [jacobsmile/tmodloader1.4](https://github.com/JACOBSMILE/tmodloader1.4)). `tModLoader/Mods/enabled.json` is generated on each start.
 
-To use local `.tmod` files instead, place them in `tModLoader/Mods/` and add their internal mod names to `enabled.json` (see [tModLoader dedicated server docs](https://github.com/tModLoader/tModLoader/tree/stable/patches/tModLoader/Terraria/release_extras/DedicatedServerUtils)).
-
-#### Troubleshooting mod sync
-
-Confirm sync worked:
+#### Verify mods loaded
 
 ```bash
-cat tModLoader/Mods/enabled.json          # should NOT be []
-find steamapps/workshop/content/1281930 -name '*.tmod'
+cat tModLoader/Mods/enabled.json
+find steamMods/steamapps/workshop/content/1281930 -name '*.tmod'
+docker compose logs tml 2>&1 | grep '\[mods\]'
 ```
 
-If logs show `Segmentation fault` or `futex robust_list` from steamcmd, pull the latest image (`docker compose build --no-cache`) or download mods on the **host**:
+You should see `[mods] Sync complete` and a non-empty `enabled.json`.
 
-```bash
-sudo apt install steamcmd   # Debian/Ubuntu amd64
-chmod +x sync-mods-host.sh
-./sync-mods-host.sh
-docker compose restart tml
-```
+#### ARM hosts (Apple Silicon, Raspberry Pi, etc.)
+
+The game server runs natively on ARM. SteamCMD (workshop download) is x86-only, so on first setup either:
+
+1. Run `docker compose up -d --build` once on an **amd64** machine (or with `DOCKER_DEFAULT_PLATFORM=linux/amd64`) so `steamMods/` is populated, then copy the whole project folder to ARM, or  
+2. Copy `.tmod` files into `tModLoader/Mods/` and set `enabled.json` by hand (original cubebuc workflow).
+
+On ARM, logs will show `Skipping workshop download` — that is expected if `steamMods/` is already present.
 
 ## Recommendations
 - By default the `tModLoader` and `backup` folders are going to be owned by root. You can make them user owned by uncommenting the `user` line in `docker-compose.yml` and `chown` line in `backup.sh`. Don't forget to change the ids to match your user and reset docker.

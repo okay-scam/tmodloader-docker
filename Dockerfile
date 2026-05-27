@@ -1,36 +1,43 @@
+# steamcmd bundle is built on amd64 (x86-only); game server image is multi-arch like cubebuc.
+FROM --platform=linux/amd64 steamcmd/steamcmd:ubuntu-22 AS steam-builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /bundle
+RUN curl -sqL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxvf - \
+    && mkdir -p i386-lib bin \
+    && cp -a /lib/i386-linux-gnu/. i386-lib/ \
+    && cp linux32/libstdc++.so.6 . \
+    && cp steamcmd.sh bin/ \
+    && cp linux32/steamcmd bin/linux32_steamcmd \
+    && cp /usr/games/steamcmd bin/steamcmd_wrapper
+
 FROM mcr.microsoft.com/dotnet/sdk:8.0
 
+ARG TARGETARCH
 ARG TML_VERSION
 
 WORKDIR /app
 
-# steamcmd is 32-bit; install full i386 runtime on amd64 (do not overlay partial libc copies)
-ARG DEBIAN_FRONTEND=noninteractive
-RUN dpkg --add-architecture i386 \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-        unzip python3 \
-        libc6:i386 libstdc++6:i386 libgcc-s1:i386 \
-        locales \
-    && sed -i '/en_US.UTF-8/s/# //g' /etc/locale.gen \
-    && locale-gen en_US.UTF-8 \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends unzip \
     && rm -rf /var/lib/apt/lists/*
 
-ENV LANG=en_US.UTF-8
-ENV LC_ALL=en_US.UTF-8
-# Avoid steam runtime shim issues inside minimal containers
-ENV STEAM_RUNTIME=0
+COPY --from=steam-builder /bundle /tmp/steamcmd-bundle
+COPY install-steamcmd.sh /tmp/install-steamcmd.sh
+RUN chmod +x /tmp/install-steamcmd.sh && TARGETARCH=$TARGETARCH /tmp/install-steamcmd.sh \
+    && rm -rf /tmp/steamcmd-bundle /tmp/install-steamcmd.sh
 
 RUN wget https://github.com/tModLoader/tModLoader/releases/download/${TML_VERSION}/tModLoader.zip \
     && unzip tModLoader.zip \
     && rm tModLoader.zip \
     && chmod +x *.sh
 
-RUN mkdir -p /app/steamcmd \
-    && curl -sqL "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz" | tar zxvf - -C /app/steamcmd
-
-COPY entrypoint.sh sync-mods.sh extract-mod-name.py /app/
-RUN chmod +x /app/entrypoint.sh /app/sync-mods.sh /app/extract-mod-name.py
+COPY entrypoint.sh sync-mods.sh /app/
+RUN chmod +x /app/entrypoint.sh /app/sync-mods.sh
 
 RUN chown -R 1001:1001 /app
 

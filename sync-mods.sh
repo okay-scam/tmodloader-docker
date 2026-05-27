@@ -1,80 +1,93 @@
-#!/bin/sh
-set -eu
-
-ENABLED_ONLY=0
-if [ "${1:-}" = "--enabled-only" ]; then
-  ENABLED_ONLY=1
-  shift
-fi
+#!/bin/bash
+# Workshop mod sync — based on https://github.com/JACOBSMILE/tmodloader1.4 entrypoint.sh
+set -euo pipefail
 
 DATA_DIR="${DATA_DIR:-/app/data}"
 MODS_FILE="${MODS_FILE:-$DATA_DIR/mods.txt}"
 MODS_DIR="$DATA_DIR/tModLoader/Mods"
-INSTALL_TXT="$MODS_DIR/install.txt"
 ENABLED_JSON="$MODS_DIR/enabled.json"
-STEAMCMD="${STEAMCMD:-/app/steamcmd/steamcmd.sh}"
+STEAM_MODS_DIR="$DATA_DIR/steamMods"
 WORKSHOP_APP=1281930
-WORKSHOP_ROOT="$DATA_DIR/steamapps/workshop/content/$WORKSHOP_APP"
+WORKSHOP_ROOT="$STEAM_MODS_DIR/steamapps/workshop/content/$WORKSHOP_APP"
 
-mkdir -p "$MODS_DIR"
+mkdir -p "$MODS_DIR" "$STEAM_MODS_DIR"
 
 if [ ! -f "$MODS_FILE" ]; then
-    echo "No mods.txt found at $MODS_FILE — skipping mod sync"
-    exit 0
+  echo "[mods] No mods.txt at $MODS_FILE — skipping"
+  exit 0
 fi
 
-# Collect workshop IDs: one per line, # comments and blank lines ignored
-MOD_IDS=""
+MOD_IDS=()
 while IFS= read -r line || [ -n "$line" ]; do
-  line=$(printf '%s' "$line" | sed 's/#.*//' | tr -d ' \t\r')
+  line="${line%%#*}"
+  line="${line//[[:space:]]/}"
   [ -z "$line" ] && continue
-  MOD_IDS="$MOD_IDS $line"
+  MOD_IDS+=("$line")
 done < "$MODS_FILE"
 
-# Write install.txt for workshop downloads
-: > "$INSTALL_TXT"
-for id in $MOD_IDS; do
-  echo "$id" >> "$INSTALL_TXT"
-done
-
-if [ -z "$MOD_IDS" ]; then
-    echo "[]" > "$ENABLED_JSON"
-    echo "No mods listed in mods.txt"
-    exit 0
+if [ "${#MOD_IDS[@]}" -eq 0 ]; then
+  echo "[]" > "$ENABLED_JSON"
+  echo "[mods] No mod IDs in mods.txt"
+  exit 0
 fi
 
-if [ "$ENABLED_ONLY" -eq 0 ]; then
-  if [ ! -f "$STEAMCMD" ]; then
-      echo "steamcmd not found at $STEAMCMD — cannot download workshop mods" >&2
-      exit 1
-  fi
+can_download() {
+  command -v steamcmd >/dev/null 2>&1 && [ "$(uname -m)" = "x86_64" ]
+}
 
-  echo "Downloading workshop mods from mods.txt..."
-  steamcmd_command=""
-  for id in $MOD_IDS; do
-    steamcmd_command="$steamcmd_command +workshop_download_item $WORKSHOP_APP $id validate"
+if can_download; then
+  echo "[mods] Downloading ${#MOD_IDS[@]} workshop mod(s)..."
+  workshop_cmds=""
+  for id in "${MOD_IDS[@]}"; do
+    workshop_cmds+=" +workshop_download_item $WORKSHOP_APP $id"
   done
-
   # shellcheck disable=SC2086
-  if ! "$STEAMCMD" +force_install_dir "$DATA_DIR" +login anonymous $steamcmd_command +quit; then
-      echo "ERROR: steamcmd failed — workshop mods were not downloaded" >&2
-      echo "If this persists, install steamcmd on the host and run: ./sync-mods-host.sh" >&2
-      exit 1
-  fi
+  steamcmd +force_install_dir "$STEAM_MODS_DIR" +login anonymous $workshop_cmds +quit
+else
+  echo "[mods] Skipping workshop download on $(uname -m) (steamcmd needs amd64)"
+  echo "[mods] Copy steamMods/ from an amd64 host, or place .tmod files in tModLoader/Mods/"
 fi
 
-echo "Building enabled.json..."
-NAMES_FILE=$(mktemp)
-for id in $MOD_IDS; do
-  tmod=$(find "$WORKSHOP_ROOT/$id" -name "*.tmod" 2>/dev/null | head -n 1 || true)
-  if [ -z "$tmod" ]; then
-    echo "ERROR: no .tmod found for workshop id $id after download" >&2
-    rm -f "$NAMES_FILE"
-    exit 1
+echo "[mods] Building enabled.json..."
+names=()
+missing=0
+for id in "${MOD_IDS[@]}"; do
+  content_dir=$(ls -d "$WORKSHOP_ROOT/$id"/*/ 2>/dev/null | tail -n 1 || true)
+  if [ -z "$content_dir" ]; then
+    echo "[mods] WARNING: workshop id $id not found under $WORKSHOP_ROOT" >&2
+    missing=$((missing + 1))
+    continue
   fi
-  python3 /app/extract-mod-name.py "$tmod" >> "$NAMES_FILE"
+  tmod_file=$(ls -1 "$content_dir"*.tmod 2>/dev/null | head -n 1 || true)
+  if [ -z "$tmod_file" ]; then
+    echo "[mods] WARNING: no .tmod in $content_dir" >&2
+    missing=$((missing + 1))
+    continue
+  fi
+  modname=$(basename "$tmod_file" .tmod)
+  names+=("$modname")
+  echo "[mods] Enabled $modname ($id)"
 done
-python3 -c "import json, pathlib; names=[l.strip() for l in pathlib.Path('$NAMES_FILE').read_text().splitlines() if l.strip()]; pathlib.Path('$ENABLED_JSON').write_text(json.dumps(names, indent=2) + '\n')"
-rm -f "$NAMES_FILE"
 
-echo "Mod sync complete ($(wc -l < "$INSTALL_TXT" | tr -d ' ') workshop item(s))"
+if [ "${#names[@]}" -eq 0 ]; then
+  echo "[mods] ERROR: no mods could be enabled. On ARM, copy steamMods/ from amd64 or add .tmod files manually." >&2
+  exit 1
+fi
+
+if [ "$missing" -gt 0 ] && ! can_download; then
+  echo "[mods] WARNING: $missing mod(s) missing workshop files (expected on ARM without a prior amd64 sync)" >&2
+fi
+
+{
+  echo "["
+  for i in "${!names[@]}"; do
+    if [ "$i" -lt $((${#names[@]} - 1)) ]; then
+      printf '  "%s",\n' "${names[$i]}"
+    else
+      printf '  "%s"\n' "${names[$i]}"
+    fi
+  done
+  echo "]"
+} > "$ENABLED_JSON"
+
+echo "[mods] Sync complete"

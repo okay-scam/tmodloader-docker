@@ -15,8 +15,15 @@ WORKSHOP_ROOT="$DATA_DIR/steamMods/steamapps/workshop/content/$WORKSHOP_APP"
 DD="${DEPOTDOWNLOADER:-/opt/depotdownloader/DepotDownloader}"
 
 # Server tModLoader version as YEAR.MONTH (e.g. v2025.10.3.1 -> 2025.10), used to pick a
-# compatible mod build. Empty (unknown) means "use the newest build available".
-SERVER_VER="$(printf '%s' "${TML_VERSION:-}" | sed 's/^v//' | cut -d. -f1-2)"
+# compatible mod build. The release tag zero-pads the month (v2026.03.3.0) but workshop
+# build folders do not (2026.3), so strip leading zeros to keep `sort -V` comparisons honest.
+# Empty (unknown) means "use the newest build available".
+RAW_VER="$(printf '%s' "${TML_VERSION:-}" | sed 's/^v//' | cut -d. -f1-2)"
+if [[ -n "$RAW_VER" ]]; then
+  SERVER_VER="$(awk -F. '{printf "%d.%d", $1, $2}' <<<"$RAW_VER")"
+else
+  SERVER_VER=""
+fi
 
 mkdir -p "$MODS_DIR"
 

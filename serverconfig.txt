@@ -1,4 +1,0 @@
-upnp=0
-motd=Boo
-password=123
-#world=/app/data/tModLoader/Worlds/TestWorld.wld

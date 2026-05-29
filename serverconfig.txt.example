@@ -1,0 +1,20 @@
+# tModLoader dedicated server config.
+# This file is a template; on first launch it is copied to serverconfig.txt
+# (which is gitignored, so your edits survive a git pull).
+
+# World to load. If it doesn't exist, it's created from the autocreate settings below.
+world=/app/data/tModLoader/Worlds/World.wld
+worldname=World
+# World size when autocreating: 1=small, 2=medium, 3=large
+autocreate=3
+
+# Max players, and a join password (leave blank for no password).
+maxplayers=8
+password=
+
+# Port the server listens on inside the container. Leave at 7777 and change the
+# published host port via TML_PORT in .env instead.
+port=7777
+
+# The port is published by Docker, so UPnP isn't needed.
+upnp=0

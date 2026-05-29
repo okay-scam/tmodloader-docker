@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
     #user: "1001:1001"
     ports:
-      - "7777:7777"
+      - "${TML_PORT:-7777}:7777"
     volumes:
       - .:/app/data
     command:
@@ -33,7 +33,7 @@ services:
       # Keep 7 days of 15-min snapshots (~672 files). Adjust to taste.
       BACKUP_RETENTION_DAYS: "7"
       BACKUP_PRUNING_LEEWAY: "1m"
-      TZ: "Australia/Melbourne"
+      TZ: "${TZ:-Australia/Melbourne}"
     volumes:
       - ./tModLoader/Worlds:/backup/Worlds:ro
       - ./backups:/archive

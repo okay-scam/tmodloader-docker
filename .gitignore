@@ -3,3 +3,5 @@ backups/
 steamMods/
 CLAUDE.md
 mods.txt
+serverconfig.txt
+.env

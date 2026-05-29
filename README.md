@@ -44,7 +44,12 @@ docker compose up -d --build
 ```
 
 ## Server config
-Edit `serverconfig.txt`. Setting `world` there starts the server directly; omitting it starts the interactive console.
+Server settings live in `serverconfig.txt`, created from `serverconfig.txt.example` on first launch. The template sets a `world`, so the server boots headless and starts listening; edit it to change the world, password, or max players.
+
+Deploy-specific values — build version, published host port, timezone — go in `.env`:
+```bash
+cp .env.example .env
+```
 
 ## Backups
 Worlds in `tModLoader/Worlds/` are archived to `backups/` every 15 minutes (7-day retention). Adjust the schedule/retention under the `backup` service in `docker-compose.yml`.
@@ -58,8 +63,7 @@ docker compose start tml
 ```
 
 ## Updating tModLoader
+Set `TML_VERSION` in `.env` to a newer [release tag](https://github.com/tModLoader/tModLoader/releases) (note the zero-padded month, e.g. `v2026.03.3.0`), then rebuild:
 ```bash
-docker compose down
-export TML_VERSION=v2xxx.y.z
 docker compose up -d --build
 ```

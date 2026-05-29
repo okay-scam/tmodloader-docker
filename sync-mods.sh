@@ -36,13 +36,6 @@ if [[ ${#MOD_IDS[@]} -eq 0 ]]; then
   exit 0
 fi
 
-echo "[mods] Syncing ${#MOD_IDS[@]} workshop mod(s) (server tML ${SERVER_VER:-unknown})..."
-for id in "${MOD_IDS[@]}"; do
-  echo "[mods] Downloading workshop item $id..."
-  "$DD" -app "$WORKSHOP_APP" -pubfile "$id" -dir "$WORKSHOP_ROOT/$id" \
-    || echo "[mods] NOTE: DepotDownloader exited non-zero for $id — will verify below." >&2
-done
-
 # A workshop item contains one .tmod build per tModLoader version, in YEAR.MONTH folders.
 # Pick the highest build folder that is <= the server version.
 pick_build() {
@@ -57,10 +50,21 @@ pick_build() {
   printf '%s' "$chosen"
 }
 
+echo "[mods] Syncing ${#MOD_IDS[@]} workshop mod(s) (server tML ${SERVER_VER:-unknown})..."
+
 names=()
 missing=0
 for id in "${MOD_IDS[@]}"; do
   item_dir="$WORKSHOP_ROOT/$id"
+  # Skip the Steam connection if a build compatible with this server version is already cached.
+  # To force a re-check/update, delete the item's folder under steamMods/ (or set MODS_FORCE=1).
+  if [[ "${MODS_FORCE:-0}" != "1" && -n "$(pick_build "$item_dir")" ]]; then
+    echo "[mods] $id already cached — skipping download."
+  else
+    echo "[mods] Downloading workshop item $id..."
+    "$DD" -app "$WORKSHOP_APP" -pubfile "$id" -dir "$item_dir" \
+      || echo "[mods] NOTE: DepotDownloader exited non-zero for $id — will verify below." >&2
+  fi
   build="$(pick_build "$item_dir")"
   if [[ -z "$build" ]]; then
     echo "[mods] WARNING: no build compatible with tML ${SERVER_VER:-?} for id $id — skipping." >&2

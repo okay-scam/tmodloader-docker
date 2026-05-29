@@ -54,20 +54,22 @@ Paths start with `/app/data`, because that is where root repo folder is mapped i
 ---
 
 ### Backups
-Backups are setup using cron and save into `backups/` folder (generates after first backup).
-<br>
-By default there are hourly and daily backups (keeping 3 and 2 last backups respectively).
-<br>
-You can edit the `crontab` file to customize them.
+World backups are handled by the `backup` service, which runs [offen/docker-volume-backup](https://github.com/offen/docker-volume-backup). It archives `tModLoader/Worlds/` into the `backups/` folder on a schedule — no host cron needed.
 
-Example:
-```cron
-0 * * * * /app/data/backup.sh hourly 3
+Defaults (edit under the `backup` service in `docker-compose.yml`):
+- **Schedule:** every 15 minutes — `BACKUP_CRON_EXPRESSION: "*/15 * * * *"`
+- **Retention:** prune archives older than 7 days — `BACKUP_RETENTION_DAYS: "7"`
+- **Filenames:** `tmodloader-<timestamp>.tar.gz`, with `tmodloader-latest.tar.gz` always pointing at the newest
+- **Timezone:** `Australia/Melbourne` — `TZ`
+
+**Restore** a world by extracting an archive and copying the `.wld` back:
+```bash
+mkdir -p /tmp/restore && tar -xzf backups/tmodloader-latest.tar.gz -C /tmp/restore
+ls /tmp/restore/backup/Worlds          # find the world file
+docker compose stop tml
+cp /tmp/restore/backup/Worlds/<world>.wld tModLoader/Worlds/
+docker compose start tml
 ```
-- `0 * * * *` → cron timing syntax
-- `/app/data/backup.sh` → backup script - do NOT change
-- `hourly` → subfolder name under backups
-- `3` → number of backups to keep in this folder
 
 ---
 ### Updating
@@ -125,6 +127,6 @@ docker compose logs tml 2>&1 | grep '\[mods\]'
 You should see `[mods] Sync complete` and a non-empty `enabled.json`.
 
 ## Recommendations
-- By default the `tModLoader` and `backup` folders are going to be owned by root. You can make them user owned by uncommenting the `user` line in `docker-compose.yml` and `chown` line in `backup.sh`. Don't forget to change the ids to match your user and reset docker.
+- By default the `tModLoader` and `backups` folders are owned by root. You can make them user owned by uncommenting the `user` line in `docker-compose.yml` (change the ids to match your user) and resetting docker.
 - Add [Better Autosave](https://steamcommunity.com/sharedfiles/filedetails/?id=2566694256) mod - by default it saves the world only once per Terraria day.
 - Specifying `world` in the `serverconfig.txt` disables interactive mode and starts the server directly (omitting it starts interactive mode).

@@ -22,20 +22,18 @@ services:
     tty: true
 
   backup:
-    image: alpine:latest
+    image: offen/docker-volume-backup:v2
     container_name: tml_backup
     restart: unless-stopped
-    volumes:
-      - .:/app/data
     environment:
-      - TZ=Europe/Prague
-    command: >
-      /bin/sh -c "
-      cp /app/data/crontab /var/spool/cron/crontabs/root &&
-      chown root:root /var/spool/cron/crontabs/root &&
-      chmod 600 /var/spool/cron/crontabs/root &&
-      echo 'Starting Cron...' &&
-      exec crond -f -d 8
-      "
-    stdin_open: true
-    tty: true
+      # Every 15 min — match or slightly trail tModLoader's autosave interval
+      BACKUP_CRON_EXPRESSION: "*/15 * * * *"
+      BACKUP_FILENAME: "tmodloader-%Y-%m-%dT%H-%M-%S.tar.gz"
+      BACKUP_LATEST_SYMLINK: "tmodloader-latest.tar.gz"
+      # Keep 7 days of 15-min snapshots (~672 files). Adjust to taste.
+      BACKUP_RETENTION_DAYS: "7"
+      BACKUP_PRUNING_LEEWAY: "1m"
+      TZ: "Australia/Melbourne"
+    volumes:
+      - ./tModLoader/Worlds:/backup/Worlds:ro
+      - ./backups:/archive

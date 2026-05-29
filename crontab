@@ -1,5 +1,0 @@
-# 1. Hourly Backup (Keep 3)
-0 * * * * /app/data/backup.sh hourly 3
-
-# 2. Daily Backup at 4AM (Keep 2)
-0 4 * * * /app/data/backup.sh daily 2

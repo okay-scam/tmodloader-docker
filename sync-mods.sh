@@ -7,6 +7,7 @@ set -uo pipefail
 
 DATA_DIR="${DATA_DIR:-/app/data}"
 MODS_FILE="$DATA_DIR/mods.txt"
+MODS_EXAMPLE="$DATA_DIR/mods.txt.example"
 MODS_DIR="$DATA_DIR/tModLoader/Mods"
 ENABLED_JSON="$MODS_DIR/enabled.json"
 WORKSHOP_APP=1281930
@@ -26,6 +27,13 @@ else
 fi
 
 mkdir -p "$MODS_DIR"
+
+# mods.txt is gitignored so user edits survive a pull; seed it from the tracked template
+# on first run.
+if [[ ! -f "$MODS_FILE" && -f "$MODS_EXAMPLE" ]]; then
+  cp "$MODS_EXAMPLE" "$MODS_FILE"
+  echo "[mods] Created mods.txt from mods.txt.example — edit it to choose your mods."
+fi
 
 # Parse mod IDs: drop everything after '#', strip whitespace, keep digit-only lines.
 MOD_IDS=()

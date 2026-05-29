@@ -9,7 +9,7 @@ git clone https://github.com/okay-scam/tmodloader-docker.git
 cd tmodloader-docker
 ```
 
-2. *(Optional)* Add mods: put [Steam Workshop mod IDs](https://steamcommunity.com/workshop/browse/?appid=1281930) in `mods.txt`, one per line.
+2. *(Optional)* Add mods: copy `mods.txt.example` to `mods.txt` and list [Steam Workshop mod IDs](https://steamcommunity.com/workshop/browse/?appid=1281930), one per line. (If you skip this, `mods.txt` is created from the example on first launch.)
 
 3. Launch:
 ```bash

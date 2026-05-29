@@ -23,7 +23,7 @@ docker compose up -d --build
 
 After changing `mods.txt`, run `docker compose up -d --build` or `docker compose restart tml`.
 
-Works on **ARM and amd64**. `docker-compose.yml` runs the game container as **linux/amd64** so SteamCMD can download workshop mods from `mods.txt` on Apple Silicon and other ARM hosts (uses emulation; a bit slower than native ARM).
+Runs **natively on ARM and amd64** — no emulation. Workshop mods listed in `mods.txt` are downloaded automatically on startup with [DepotDownloader](https://github.com/SteamRE/DepotDownloader) (no Steam account needed).
 
 5. Attach to tModLoader container
 ```bash
@@ -111,31 +111,18 @@ After editing `mods.txt`, restart the server:
 docker compose restart tml
 ```
 
-Workshop files are stored in `steamMods/` (same layout as [jacobsmile/tmodloader1.4](https://github.com/JACOBSMILE/tmodloader1.4)). `tModLoader/Mods/enabled.json` is generated on each start.
+#### How it works
+
+On container start, the entrypoint runs `sync-mods.sh`, which uses [DepotDownloader](https://github.com/SteamRE/DepotDownloader) to download each Workshop item anonymously into a `steamMods/` cache, copies the build matching your server's tModLoader version into `tModLoader/Mods/`, and regenerates `enabled.json` to match `mods.txt`. DepotDownloader is a managed .NET tool, so this runs **natively on ARM (Apple Silicon, Raspberry Pi) and amd64** — no emulation and no Steam account required.
 
 #### Verify mods loaded
 
 ```bash
 cat tModLoader/Mods/enabled.json
-find steamMods/steamapps/workshop/content/1281930 -name '*.tmod'
 docker compose logs tml 2>&1 | grep '\[mods\]'
 ```
 
 You should see `[mods] Sync complete` and a non-empty `enabled.json`.
-
-#### ARM hosts (Apple Silicon, Raspberry Pi, etc.)
-
-By default the `tml` service uses `platform: linux/amd64` so workshop mods from `mods.txt` download automatically. After pulling compose changes, rebuild so the image includes SteamCMD:
-
-```bash
-docker compose down
-docker compose build --no-cache
-docker compose up -d
-```
-
-Logs should show `[mods] Downloading … workshop mod(s)…` then `[mods] Sync complete`.
-
-**Native ARM (faster, no automatic workshop download):** remove the `platform:` / `platforms:` lines from `docker-compose.yml`, rebuild, and either copy a populated `steamMods/` folder from an amd64 machine or place `.tmod` files in `tModLoader/Mods/` manually.
 
 ## Recommendations
 - By default the `tModLoader` and `backup` folders are going to be owned by root. You can make them user owned by uncommenting the `user` line in `docker-compose.yml` and `chown` line in `backup.sh`. Don't forget to change the ids to match your user and reset docker.

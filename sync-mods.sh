@@ -1,99 +1,91 @@
-#!/bin/bash
-# Workshop mod sync — based on https://github.com/JACOBSMILE/tmodloader1.4 entrypoint.sh
-set -euo pipefail
+#!/usr/bin/env bash
+# Download Steam Workshop mods listed in mods.txt and enable them for the tModLoader server.
+# Uses DepotDownloader (managed .NET, runs native on any arch) with an anonymous Steam login,
+# then copies the build matching this server's tModLoader version into the Mods folder and
+# regenerates enabled.json. Remove/comment a line in mods.txt to disable that mod.
+set -uo pipefail
 
 DATA_DIR="${DATA_DIR:-/app/data}"
-MODS_FILE="${MODS_FILE:-$DATA_DIR/mods.txt}"
+MODS_FILE="$DATA_DIR/mods.txt"
 MODS_DIR="$DATA_DIR/tModLoader/Mods"
 ENABLED_JSON="$MODS_DIR/enabled.json"
-STEAM_MODS_DIR="$DATA_DIR/steamMods"
 WORKSHOP_APP=1281930
-WORKSHOP_ROOT="$STEAM_MODS_DIR/steamapps/workshop/content/$WORKSHOP_APP"
+# DepotDownloader caches each item here (incremental re-downloads); kept out of git via .gitignore.
+WORKSHOP_ROOT="$DATA_DIR/steamMods/steamapps/workshop/content/$WORKSHOP_APP"
+DD="${DEPOTDOWNLOADER:-/opt/depotdownloader/DepotDownloader}"
 
-mkdir -p "$MODS_DIR" "$STEAM_MODS_DIR"
+# Server tModLoader version as YEAR.MONTH (e.g. v2025.10.3.1 -> 2025.10), used to pick a
+# compatible mod build. Empty (unknown) means "use the newest build available".
+SERVER_VER="$(printf '%s' "${TML_VERSION:-}" | sed 's/^v//' | cut -d. -f1-2)"
 
-if [ ! -f "$MODS_FILE" ]; then
-  echo "[mods] No mods.txt at $MODS_FILE — skipping"
-  exit 0
-fi
+mkdir -p "$MODS_DIR"
 
+# Parse mod IDs: drop everything after '#', strip whitespace, keep digit-only lines.
 MOD_IDS=()
-while IFS= read -r line || [ -n "$line" ]; do
-  line="${line%%#*}"
-  line="${line//[[:space:]]/}"
-  [ -z "$line" ] && continue
-  MOD_IDS+=("$line")
-done < "$MODS_FILE"
+if [[ -f "$MODS_FILE" ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    line="${line//[[:space:]]/}"
+    [[ "$line" =~ ^[0-9]+$ ]] && MOD_IDS+=("$line")
+  done < "$MODS_FILE"
+fi
 
-if [ "${#MOD_IDS[@]}" -eq 0 ]; then
-  echo "[]" > "$ENABLED_JSON"
-  echo "[mods] No mod IDs in mods.txt"
+if [[ ${#MOD_IDS[@]} -eq 0 ]]; then
+  echo "[mods] No mod IDs in mods.txt — server will start with no mods enabled."
+  printf '[]\n' > "$ENABLED_JSON"
   exit 0
 fi
 
-can_download() {
-  command -v steamcmd >/dev/null 2>&1 && [ "$(uname -m)" = "x86_64" ]
+echo "[mods] Syncing ${#MOD_IDS[@]} workshop mod(s) (server tML ${SERVER_VER:-unknown})..."
+for id in "${MOD_IDS[@]}"; do
+  echo "[mods] Downloading workshop item $id..."
+  "$DD" -app "$WORKSHOP_APP" -pubfile "$id" -dir "$WORKSHOP_ROOT/$id" \
+    || echo "[mods] NOTE: DepotDownloader exited non-zero for $id — will verify below." >&2
+done
+
+# A workshop item contains one .tmod build per tModLoader version, in YEAR.MONTH folders.
+# Pick the highest build folder that is <= the server version.
+pick_build() {
+  local item_dir="$1" chosen=""
+  while IFS= read -r v; do
+    [[ -z "$v" ]] && continue
+    if [[ -z "$SERVER_VER" || "$(printf '%s\n%s\n' "$v" "$SERVER_VER" | sort -V | head -n1)" == "$v" ]]; then
+      chosen="$v"
+    fi
+  done < <(find "$item_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null \
+             | grep -E '^[0-9]+\.[0-9]+$' | sort -V)
+  printf '%s' "$chosen"
 }
 
-if ! can_download && [ "${#MOD_IDS[@]}" -gt 0 ]; then
-  if ! command -v steamcmd >/dev/null 2>&1; then
-    echo "[mods] steamcmd is not in this image — rebuild with: docker compose build --no-cache" >&2
-  elif [ "$(uname -m)" != "x86_64" ]; then
-    echo "[mods] Workshop download needs linux/amd64 (current: $(uname -m))" >&2
-    echo "[mods] Rebuild and run with platform linux/amd64 in docker-compose.yml, or copy steamMods/ from an amd64 host." >&2
-  fi
-fi
-
-if can_download; then
-  echo "[mods] Downloading ${#MOD_IDS[@]} workshop mod(s)..."
-  workshop_cmds=""
-  for id in "${MOD_IDS[@]}"; do
-    workshop_cmds+=" +workshop_download_item $WORKSHOP_APP $id"
-  done
-  # shellcheck disable=SC2086
-  steamcmd +force_install_dir "$STEAM_MODS_DIR" +login anonymous $workshop_cmds +quit
-fi
-
-echo "[mods] Building enabled.json..."
 names=()
 missing=0
 for id in "${MOD_IDS[@]}"; do
-  content_dir=$(ls -d "$WORKSHOP_ROOT/$id"/*/ 2>/dev/null | tail -n 1 || true)
-  if [ -z "$content_dir" ]; then
-    echo "[mods] WARNING: workshop id $id not found under $WORKSHOP_ROOT" >&2
-    missing=$((missing + 1))
-    continue
+  item_dir="$WORKSHOP_ROOT/$id"
+  build="$(pick_build "$item_dir")"
+  if [[ -z "$build" ]]; then
+    echo "[mods] WARNING: no build compatible with tML ${SERVER_VER:-?} for id $id — skipping." >&2
+    missing=$((missing + 1)); continue
   fi
-  tmod_file=$(ls -1 "$content_dir"*.tmod 2>/dev/null | head -n 1 || true)
-  if [ -z "$tmod_file" ]; then
-    echo "[mods] WARNING: no .tmod in $content_dir" >&2
-    missing=$((missing + 1))
-    continue
+  tmod="$(find "$item_dir/$build" -maxdepth 1 -name '*.tmod' 2>/dev/null | head -n1)"
+  if [[ -z "$tmod" ]]; then
+    echo "[mods] WARNING: no .tmod for id $id (bad ID or download failed) — skipping." >&2
+    missing=$((missing + 1)); continue
   fi
-  modname=$(basename "$tmod_file" .tmod)
-  names+=("$modname")
-  echo "[mods] Enabled $modname ($id)"
+  name="$(basename "$tmod" .tmod)"
+  cp -f "$tmod" "$MODS_DIR/$name.tmod"
+  names+=("$name")
+  echo "[mods] Enabled $name ($id) [build $build]"
 done
 
-if [ "${#names[@]}" -eq 0 ]; then
-  echo "[mods] ERROR: no mods could be enabled. On ARM, copy steamMods/ from amd64 or add .tmod files manually." >&2
-  exit 1
-fi
-
-if [ "$missing" -gt 0 ] && ! can_download; then
-  echo "[mods] WARNING: $missing mod(s) missing workshop files (expected on ARM without a prior amd64 sync)" >&2
-fi
-
 {
-  echo "["
+  printf '[\n'
   for i in "${!names[@]}"; do
-    if [ "$i" -lt $((${#names[@]} - 1)) ]; then
-      printf '  "%s",\n' "${names[$i]}"
-    else
-      printf '  "%s"\n' "${names[$i]}"
-    fi
+    sep=,
+    [[ $i -eq $((${#names[@]} - 1)) ]] && sep=
+    printf '  "%s"%s\n' "${names[$i]}" "$sep"
   done
-  echo "]"
+  printf ']\n'
 } > "$ENABLED_JSON"
 
+echo "[mods] Wrote $ENABLED_JSON — ${#names[@]} enabled, $missing missing."
 echo "[mods] Sync complete"
